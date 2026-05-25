@@ -9,6 +9,21 @@ type LogEntry = {
 }
 
 const STORAGE_KEY = 'wa_sender_config'
+const PASSWORD = 'liav'
+
+// Normalize a phone number to Green API international format (digits only, no leading +).
+// Accepts Israeli local format (05XXXXXXXX) and converts it to 9725XXXXXXXX.
+function normalizeNumber(raw: string): string {
+  let n = raw.replace(/\D/g, '')
+  if (!n) return ''
+  if (n.startsWith('972')) return n
+  if (n.startsWith('0')) return '972' + n.slice(1) // 0559218603 -> 972559218603
+  return n
+}
+
+function isValidNumber(raw: string): boolean {
+  return normalizeNumber(raw).length >= 11
+}
 
 function loadConfig() {
   if (typeof window === 'undefined') return { instance: '', token: '', delay: 3 }
@@ -31,6 +46,53 @@ export default function Home() {
   const stopRef = useRef(false)
   const logEndRef = useRef<HTMLDivElement>(null)
 
+  // Password gate — asked on every page load (not remembered).
+  const [authed, setAuthed] = useState(false)
+  const [pwInput, setPwInput] = useState('')
+  const [pwError, setPwError] = useState(false)
+
+  const tryUnlock = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (pwInput === PASSWORD) {
+      setAuthed(true)
+      setPwError(false)
+    } else {
+      setPwError(true)
+    }
+  }
+
+  if (!authed) {
+    return (
+      <div style={{ width: '100%', maxWidth: 360 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'var(--green-bg)',
+            border: '1px solid rgba(37,211,102,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 18,
+          }}>🔒</div>
+          <h1 style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.3px' }}>WA Bulk Sender</h1>
+        </div>
+        <form onSubmit={tryUnlock}>
+          <label style={labelStyle}>Password</label>
+          <input
+            style={{ ...inputStyle, borderColor: pwError ? 'var(--red)' : 'var(--border)' }}
+            type="password"
+            autoFocus
+            placeholder="Enter password"
+            value={pwInput}
+            onChange={e => { setPwInput(e.target.value); setPwError(false) }}
+          />
+          {pwError && (
+            <p style={{ fontSize: 12, color: 'var(--red)', marginTop: 8 }}>Wrong password.</p>
+          )}
+          <button type="submit" style={{ ...btnStyle(false), marginTop: 16 }}>Unlock →</button>
+        </form>
+      </div>
+    )
+  }
+
   const saveConfig = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ instance, token, delay }))
   }
@@ -50,8 +112,8 @@ export default function Home() {
 
     const nums = numbers
       .split('\n')
-      .map(n => n.trim().replace(/\D/g, ''))
-      .filter(n => n.length > 6)
+      .map(n => normalizeNumber(n))
+      .filter(n => n.length >= 11)
 
     if (!nums.length) { alert('No valid numbers found.'); return }
 
@@ -154,12 +216,12 @@ export default function Home() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
           <label style={labelStyle}>Phone numbers</label>
           <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-            {numbers.split('\n').filter(n => n.trim().replace(/\D/g, '').length > 6).length} valid numbers
+            {numbers.split('\n').filter(isValidNumber).length} valid numbers
           </span>
         </div>
         <textarea
           style={{ ...inputStyle, height: 140, resize: 'vertical', fontFamily: 'DM Mono, monospace', fontSize: 12, lineHeight: 1.7 }}
-          placeholder={'972501234567\n972521234567\n972541234567\n\nOne number per line, digits only with country code'}
+          placeholder={'0559218603\n972521234567\n0541234567\n\nOne number per line. Use 05X... (Israeli) or full country code.'}
           value={numbers}
           onChange={e => setNumbers(e.target.value)}
         />
@@ -197,7 +259,7 @@ export default function Home() {
       {/* Send button */}
       {!running ? (
         <button onClick={startSending} style={btnStyle(false)}>
-          Send to {numbers.split('\n').filter(n => n.trim().replace(/\D/g, '').length > 6).length || 'all'} numbers →
+          Send to {numbers.split('\n').filter(isValidNumber).length || 'all'} numbers →
         </button>
       ) : (
         <button onClick={stop} style={btnStyle(true)}>
