@@ -1,0 +1,32 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d0d0d;
+  --surface: #161616;
+  --surface2: #1e1e1e;
+  --border: #2a2a2a;
+  --border2: #333;
+  --text: #f0f0f0;
+  --muted: #888;
+  --green: #25d366;
+  --green-dim: #1a9e4a;
+  --green-bg: rgba(37,211,102,0.08);
+  --red: #e05252;
+  --red-bg: rgba(224,82,82,0.08);
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+html { background: var(--bg); }
+
+body {
+  font-family: 'DM Sans', 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 40px 16px 80px;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
