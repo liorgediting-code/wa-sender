@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sql, ensureTable, hasDb } from '../../lib/db'
+import { sql, ensureTable, hasDb, normalizeNumber, isValidNumber } from '../../lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +25,47 @@ export async function GET(req: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ leads: [], error: message }, { status: 500 })
+  }
+}
+
+// Manually add leads — single { phone, name } or bulk { numbers: [...] }.
+export async function POST(req: NextRequest) {
+  if (!authed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!hasDb) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+
+  const body = await req.json().catch(() => ({}))
+  const rawList: string[] = Array.isArray(body.numbers)
+    ? body.numbers.map(String)
+    : body.phone != null ? [String(body.phone)] : []
+  // A name is only attached when a single number is added.
+  const name: string | null =
+    rawList.length === 1 && typeof body.name === 'string' && body.name.trim()
+      ? body.name.trim()
+      : null
+
+  // Normalize, validate, de-duplicate.
+  const phones = Array.from(
+    new Set(rawList.map(normalizeNumber).filter(p => isValidNumber(p)))
+  )
+
+  if (!phones.length) {
+    return NextResponse.json({ error: 'No valid numbers provided', added: 0 }, { status: 400 })
+  }
+
+  try {
+    await ensureTable()
+    for (const phone of phones) {
+      await sql`
+        INSERT INTO leads (phone, name, source)
+        VALUES (${phone}, ${name}, ${'manual'})
+        ON CONFLICT (phone) DO UPDATE
+          SET name = COALESCE(EXCLUDED.name, leads.name)
+      `
+    }
+    return NextResponse.json({ ok: true, added: phones.length })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 

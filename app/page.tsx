@@ -104,6 +104,34 @@ export default function Home() {
     await fetch('/api/leads?all=true', { method: 'DELETE', headers: { 'x-app-password': PASSWORD } })
   }
 
+  // Manually add numbers to the saved list (single or bulk).
+  const [addInput, setAddInput] = useState('')
+  const [addName, setAddName] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  const addLeadsManually = async () => {
+    const parts = addInput.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)
+    if (!parts.length) return
+    setAdding(true)
+    setLeadsError('')
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': PASSWORD },
+        body: JSON.stringify({ numbers: parts, name: parts.length === 1 ? addName : undefined }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setAddInput('')
+      setAddName('')
+      await loadLeads()
+    } catch (e: unknown) {
+      setLeadsError(e instanceof Error ? e.message : 'Failed to add numbers')
+    } finally {
+      setAdding(false)
+    }
+  }
+
   const loadLeadsIntoRecipients = () => {
     const existing = new Set(
       numbers.split('\n').map(n => normalizeNumber(n)).filter(Boolean)
@@ -321,6 +349,32 @@ export default function Home() {
           {leads.length > 0 && (
             <button onClick={clearLeads} style={{ ...miniBtnStyle(false), color: 'var(--red)' }}>Clear all</button>
           )}
+        </div>
+
+        {/* Manually add numbers (single or bulk) */}
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <textarea
+              style={{ ...inputStyle, flex: 2, height: 64, resize: 'vertical', fontFamily: 'DM Mono, monospace', fontSize: 12, lineHeight: 1.6 }}
+              placeholder={'Add number(s) — 0559218603\nOne per line, or comma-separated for bulk'}
+              value={addInput}
+              onChange={e => setAddInput(e.target.value)}
+            />
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              placeholder="Name (optional)"
+              value={addName}
+              onChange={e => setAddName(e.target.value)}
+              title="Used only when adding a single number"
+            />
+          </div>
+          <button
+            onClick={addLeadsManually}
+            disabled={adding || !addInput.trim()}
+            style={{ ...miniBtnStyle(adding || !addInput.trim()), marginTop: 8 }}
+          >
+            {adding ? 'Adding…' : '+ Add to saved leads'}
+          </button>
         </div>
       </section>
 
