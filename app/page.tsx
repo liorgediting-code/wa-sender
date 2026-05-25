@@ -1,11 +1,18 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 type LogEntry = {
   num: string
   status: 'ok' | 'err' | 'stopped'
   note: string
+}
+
+type Lead = {
+  phone: string
+  name: string | null
+  source: string | null
+  created_at: string
 }
 
 const STORAGE_KEY = 'wa_sender_config'
@@ -59,6 +66,54 @@ export default function Home() {
     } else {
       setPwError(true)
     }
+  }
+
+  // Saved leads (server-side, shared across browsers via the webhook).
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [leadsLoading, setLeadsLoading] = useState(false)
+  const [leadsError, setLeadsError] = useState('')
+
+  const loadLeads = useCallback(async () => {
+    setLeadsLoading(true)
+    setLeadsError('')
+    try {
+      const res = await fetch('/api/leads', { cache: 'no-store', headers: { 'x-app-password': PASSWORD } })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setLeads(Array.isArray(data.leads) ? data.leads : [])
+    } catch (e: unknown) {
+      setLeadsError(e instanceof Error ? e.message : 'Failed to load leads')
+    } finally {
+      setLeadsLoading(false)
+    }
+  }, [])
+
+  // Load the saved leads once the user unlocks.
+  useEffect(() => {
+    if (authed) loadLeads()
+  }, [authed, loadLeads])
+
+  const removeLead = async (phone: string) => {
+    setLeads(prev => prev.filter(l => l.phone !== phone)) // optimistic
+    await fetch(`/api/leads?phone=${encodeURIComponent(phone)}`, { method: 'DELETE', headers: { 'x-app-password': PASSWORD } })
+  }
+
+  const clearLeads = async () => {
+    if (!confirm('Delete all saved leads? This cannot be undone.')) return
+    setLeads([])
+    await fetch('/api/leads?all=true', { method: 'DELETE', headers: { 'x-app-password': PASSWORD } })
+  }
+
+  const loadLeadsIntoRecipients = () => {
+    const existing = new Set(
+      numbers.split('\n').map(n => normalizeNumber(n)).filter(Boolean)
+    )
+    const toAdd = leads.map(l => l.phone).filter(p => !existing.has(p))
+    if (!toAdd.length) return
+    setNumbers(prev => {
+      const base = prev.trim()
+      return (base ? base + '\n' : '') + toAdd.join('\n')
+    })
   }
 
   const saveConfig = () => {
@@ -212,6 +267,63 @@ export default function Home() {
         </p>
       </section>
 
+      {/* Saved leads */}
+      <section style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <label style={labelStyle}>Saved leads</label>
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+            {leadsLoading ? 'loading…' : `${leads.length} saved`}
+          </span>
+        </div>
+
+        <div style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          maxHeight: 160,
+          overflowY: 'auto',
+          padding: leads.length ? '6px 4px' : '14px',
+        }}>
+          {leadsError ? (
+            <p style={{ fontSize: 12, color: 'var(--red)' }}>{leadsError}</p>
+          ) : leads.length === 0 ? (
+            <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+              {leadsLoading ? 'Loading…' : 'No leads yet — they appear here when your webhook receives them.'}
+            </p>
+          ) : (
+            leads.map(l => (
+              <div key={l.phone} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 8, padding: '5px 8px', borderRadius: 6,
+              }}>
+                <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, color: 'var(--text)' }}>
+                  {l.name ? <span style={{ color: 'var(--text)' }}>{l.name} · </span> : null}
+                  <span style={{ color: 'var(--muted)' }}>{l.phone}</span>
+                </span>
+                <button
+                  onClick={() => removeLead(l.phone)}
+                  title="Remove lead"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--muted)', fontSize: 14, lineHeight: 1, padding: '2px 6px',
+                  }}
+                >✕</button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <button onClick={loadLeadsIntoRecipients} disabled={!leads.length} style={miniBtnStyle(!leads.length)}>
+            Load {leads.length || ''} into recipients ↓
+          </button>
+          <button onClick={loadLeads} style={miniBtnStyle(false)}>↻ Refresh</button>
+          {leads.length > 0 && (
+            <button onClick={clearLeads} style={{ ...miniBtnStyle(false), color: 'var(--red)' }}>Clear all</button>
+          )}
+        </div>
+      </section>
+
       {/* Numbers */}
       <section style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -343,6 +455,20 @@ const inputStyle: React.CSSProperties = {
   fontFamily: 'inherit',
   transition: 'border-color 0.15s',
 }
+
+const miniBtnStyle = (disabled: boolean): React.CSSProperties => ({
+  padding: '6px 12px',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--border)',
+  background: 'var(--surface)',
+  color: disabled ? 'var(--muted)' : 'var(--text)',
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  opacity: disabled ? 0.5 : 1,
+  fontFamily: 'inherit',
+  transition: 'all 0.15s',
+})
 
 const btnStyle = (danger: boolean): React.CSSProperties => ({
   width: '100%',
