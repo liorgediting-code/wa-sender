@@ -61,38 +61,6 @@ export default function Home() {
     }
   }
 
-  if (!authed) {
-    return (
-      <div style={{ width: '100%', maxWidth: 360 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: 'var(--green-bg)',
-            border: '1px solid rgba(37,211,102,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18,
-          }}>🔒</div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.3px' }}>WA Bulk Sender</h1>
-        </div>
-        <form onSubmit={tryUnlock}>
-          <label style={labelStyle}>Password</label>
-          <input
-            style={{ ...inputStyle, borderColor: pwError ? 'var(--red)' : 'var(--border)' }}
-            type="password"
-            autoFocus
-            placeholder="Enter password"
-            value={pwInput}
-            onChange={e => { setPwInput(e.target.value); setPwError(false) }}
-          />
-          {pwError && (
-            <p style={{ fontSize: 12, color: 'var(--red)', marginTop: 8 }}>Wrong password.</p>
-          )}
-          <button type="submit" style={{ ...btnStyle(false), marginTop: 16 }}>Unlock →</button>
-        </form>
-      </div>
-    )
-  }
-
   const saveConfig = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ instance, token, delay }))
   }
@@ -167,6 +135,39 @@ export default function Home() {
   const stop = () => { stopRef.current = true }
 
   const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0
+
+  // Password gate (after all hooks to satisfy the Rules of Hooks).
+  if (!authed) {
+    return (
+      <div style={{ width: '100%', maxWidth: 360 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'var(--green-bg)',
+            border: '1px solid rgba(37,211,102,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 18,
+          }}>🔒</div>
+          <h1 style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.3px' }}>WA Bulk Sender</h1>
+        </div>
+        <form onSubmit={tryUnlock}>
+          <label style={labelStyle}>Password</label>
+          <input
+            style={{ ...inputStyle, borderColor: pwError ? 'var(--red)' : 'var(--border)' }}
+            type="password"
+            autoFocus
+            placeholder="Enter password"
+            value={pwInput}
+            onChange={e => { setPwInput(e.target.value); setPwError(false) }}
+          />
+          {pwError && (
+            <p style={{ fontSize: 12, color: 'var(--red)', marginTop: 8 }}>Wrong password.</p>
+          )}
+          <button type="submit" style={{ ...btnStyle(false), marginTop: 16 }}>Unlock →</button>
+        </form>
+      </div>
+    )
+  }
 
   return (
     <div style={{ width: '100%', maxWidth: 560 }}>
